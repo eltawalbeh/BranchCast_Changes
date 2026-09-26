@@ -27,12 +27,14 @@ Deno.serve(async (request) => {
     const player = await admin.from('players').select('id,zone_id,active_schedule_entry_id,active_content_item_id').eq('id', session.data.player_id).single()
     if (player.error) return json({ error: player.error.message }, 500)
     const now = new Date().toISOString()
-    const schedule = await admin.from('schedule_entries').select('id,content_item_id,starts_at,ends_at').eq('zone_id', player.data.zone_id).lte('starts_at', now).or(`ends_at.is.null,ends_at.gt.${now}`).not('content_item_id', 'is', null).order('starts_at', { ascending: false }).limit(1).maybeSingle()
+    const schedule = await admin.from('schedule_entries').select('id,content_item_id,campaign_id,starts_at,ends_at,campaigns(content_item_id)').eq('zone_id', player.data.zone_id).lte('starts_at', now).or(`ends_at.is.null,ends_at.gt.${now}`).order('starts_at', { ascending: false }).limit(1).maybeSingle()
     if (schedule.error) return json({ error: schedule.error.message }, 500)
-    if (schedule.data && schedule.data.id !== player.data.active_schedule_entry_id) {
-      const command = await admin.from('player_commands').insert({ player_id: session.data.player_id, command: 'play', payload: { content_item_id: schedule.data.content_item_id, schedule_entry_id: schedule.data.id }, status: 'pending' }).select('id,command,payload,created_at').single()
+    const campaign = schedule.data?.campaigns as { content_item_id?: string | null } | null
+    const scheduleContentId = schedule.data?.content_item_id ?? campaign?.content_item_id ?? null
+    if (schedule.data && scheduleContentId && schedule.data.id !== player.data.active_schedule_entry_id) {
+      const command = await admin.from('player_commands').insert({ player_id: session.data.player_id, command: 'play', payload: { content_item_id: scheduleContentId, schedule_entry_id: schedule.data.id }, status: 'pending' }).select('id,command,payload,created_at').single()
       if (command.error) return json({ error: command.error.message }, 500)
-      await admin.from('players').update({ active_schedule_entry_id: schedule.data.id, active_content_item_id: schedule.data.content_item_id }).eq('id', session.data.player_id)
+      await admin.from('players').update({ active_schedule_entry_id: schedule.data.id, active_content_item_id: scheduleContentId }).eq('id', session.data.player_id)
       result.data = command.data
     } else if (!schedule.data && player.data.active_schedule_entry_id) {
       const command = await admin.from('player_commands').insert({ player_id: session.data.player_id, command: 'skip', payload: { schedule_entry_id: player.data.active_schedule_entry_id }, status: 'pending' }).select('id,command,payload,created_at').single()
