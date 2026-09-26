@@ -25,8 +25,11 @@ Deno.serve(async (request) => {
 
   const code = crypto.randomUUID().replaceAll('-', '').slice(0, 6).toUpperCase()
   const expiry = new Date(Date.now() + 15 * 60 * 1000).toISOString()
-  await admin.from('player_browser_sessions').update({ revoked_at: new Date().toISOString() }).eq('player_id', body.player_id).is('revoked_at', null)
-  const updated = await admin.from('players').update({ pairing_code: code, pairing_expires_at: expiry, state: 'unpaired', paired_at: null, last_error: null }).eq('id', body.player_id).select('id,display_name,device_code,state,pairing_code,pairing_expires_at').single()
+  if (body.action === 'stop') {
+    const command = await admin.from('player_commands').insert({ player_id: body.player_id, requested_by: identity.data.user.id, command: 'pause', payload: { source: 'manager-stop' }, status: 'pending' })
+    if (command.error) return json({ error: command.error.message }, 500)
+  }
+  const updated = await admin.from('players').update({ pairing_code: code, pairing_expires_at: expiry, paired_at: body.action === 'stop' ? undefined : null, last_error: null }).eq('id', body.player_id).select('id,display_name,device_code,state,pairing_code,pairing_expires_at').single()
   if (updated.error) return json({ error: updated.error.message }, 500)
-  return json({ action: body.action, player: updated.data, message: body.action === 'stop' ? 'Player stopped and a new pairing code was generated.' : 'Existing player session revoked and a new pairing code was generated.' })
+  return json({ action: body.action, player: updated.data, message: body.action === 'stop' ? 'Playback stopped, a new pairing code was generated, and the browser remains online.' : 'A new pairing code was generated.' })
 })
