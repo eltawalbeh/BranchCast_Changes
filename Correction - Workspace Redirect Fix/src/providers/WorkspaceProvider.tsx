@@ -16,7 +16,10 @@ const WorkspaceContext = createContext<WorkspaceContextValue | null>(null);
 export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
-  const [isLoading, setIsLoading] = useState(Boolean(user));
+  // Start guarded routes in a loading state. Auth restores its session
+  // asynchronously, so initializing from the first (null) user would let
+  // RequireWorkspace redirect before this provider's first refresh runs.
+  const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
