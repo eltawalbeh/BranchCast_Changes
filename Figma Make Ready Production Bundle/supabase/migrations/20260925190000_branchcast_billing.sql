@@ -1,2 +1,0 @@
--- Billing tables are created by the final runtime migration.
--- This migration is retained for ordered compatibility with the release bundle.
